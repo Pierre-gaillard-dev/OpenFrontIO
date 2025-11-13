@@ -1,0 +1,197 @@
+@startuml
+class Client
+Client : ClientID clientID
+Client : String persistentID
+Client : TokenPayload? claims
+Client : String[] roles
+Client : String[] flares
+Client : String ip
+Client : String username
+Client : WebSocket ws
+Client : PlayerCosmetics? cosmetics
+Client : Number lastPing
+Client : Map<Tick, Number> hashes
+Client : Winner? reportedWinner
+
+
+interface TunnelConfig
+TunnelConfig : String domain
+TunnelConfig : String subdomain
+TunnelConfig : Map<String, String> subdomainToService
+
+interface TunnelResponseResult
+TunnelResponseResult : String id
+TunnelResponseResult : String token
+
+interface TunnelResponse
+TunnelResponse : TunnelResponseResult response
+TunnelResponseResult - TunnelResponse
+
+interface IDResult
+IDResult : String id
+
+interface ZoneResponse
+ZoneResponse : IDResult[] result
+ZoneResponse - IDResult
+
+interface DNSRecordResponse
+DNSRecordResponse : IDResult[] result
+DNSRecordResponse - IDResult
+
+interface Ingress
+Ingress : String? hostname
+Ingress : String service
+
+interface CloudflaredConfig
+CloudflaredConfig : String tunnel
+CloudflaredConfig : String credentialsFile
+CloudflaredConfig : Ingress[] ingress
+CloudflaredConfig - Ingress
+
+interface CreateTunnelResponse
+CreateTunnelResponse : String TunnelId
+CreateTunnelResponse : String TunnelToken
+CreateTunnelResponse : String TunnelUrl
+
+class CloudFlare
+Cloudflare : String baseUrl
+Cloudflare : String accountId
+Cloudflare : String configPath
+Cloudflare : String credsPath
+Cloudflare : T makeRequest(String url, String method, any? data)
+Cloudflare : Promise<Boolean> configAlreadyExists()
+Cloudflare : Promise<CreateTunnelResponse> createTunnel(TunnelConfig config)
+Cloudflare : Promise<void> writeTunnelConfig(String tunnelId, String tunnelToken, String subdomain, String domain, Map<String, String> subdomainToService, String tunnelName)
+Cloudflare : Promise<void> updateDNSRecord(String zoneId, String tunnelId, String subdomain, String domain)
+Cloudflare : void startCloudflared()
+Cloudflare - TunnelConfig
+Cloudflare - CreateTunnelResponse
+Cloudflare - CloudflaredConfig
+Cloudflare - Ingress
+
+
+class GameManager
+GameManager : Map<GameID, GameServer> games
+GameManager : ServerConfig config
+GameManager : Logger log
+GameManager : GameServer? game(GameID id)
+GameManager : boolean addClient(Client client, GameID gameID, Number lastTurn)
+GameManager : GameServer createGame(GameId id, GameConfig? gameConfig, String? creatorClientId)
+GameManager : Number activeGames()
+GameManager : Number activeClients()
+GameManager : void tick()
+GameManager - GameServer
+GameManager - Client
+
+
+enum GamePhase {
+  LOBBY
+  IN_GAME
+  ENDED
+}
+
+class GameServer
+GameServer : Set<ClientID> sentDesyncMessageClients
+GameServer : Number maxGameDuration
+GameServer : Number disconnectedTimeout
+GameServer : Turn[] turns
+GameServer : Intent[] intents
+GameServer : Client[] activeClients
+GameServer : String? LobbyCreatorID
+GameServer : Map<ClientID, Client> allClients
+GameServer : Map<ClientID, boolean> clientsDisconnectedStatus
+GameServer : boolean _hasStarted
+GameServer : number? _startTime
+GameServer : Interval? endTurnIntervalID
+GameServer : Number lastPingUpdate
+GameServer : ClientSendingWinnerMessage? Winner
+GameServer : GameStartInfo gameStartInfo
+GameServer : Logger log
+GameServer : boolean _hasPrestarted
+GameServer : Set<ClientID> kickedClients
+GameServer : Set<ClientID> outOfSyncClients
+GameServer : Set<WebSocket> websockets
+GameServer : Map<string, {ClientSendWinnerMessage winner, Set<String> ips}> winnerVotes
+GameServer : String id
+GameServer : Logger log
+GameServer : Number created_at
+GameServer : ServerConfig config
+GameServer : GameConfig gameConfig
+GameServer : String? lobbyCreatorID
+GameServer : void updateConfig(GameConfig gameconfig)
+GameServer : void addClient(Client client, Number lastTurn)
+GameServer : number numClients()
+GameServer : Number startTime()
+GameServer : void prestart()
+GameServer : void start()
+GameServer : void addIntent(Intent intent)
+GameServer : void sendStartGameMsg(WebSocket ws, Number lastTurn)
+GameServer : void endTurn()
+GameServer : Promise<void> end()
+GameServer : Boolean isPrivateLobbyCreator(ClientID clientID)
+GameServer : GamePhase phase()
+GameServer : Boolean hasStarted()
+GameServer : GameInfo gameInfo()
+GameServer : Boolean isPublic()
+GameServer : void kickClient(ClientID clientID)
+GameServer : void checkDisconnectedStatus()
+GameServer : Boolean isClientDisconnected(ClientID clientID)
+GameServer : void markClientDisconnected(ClientID clientID, Boolean isDisconnected)
+GameServer : void archiveGame()
+GameServer : void handleSynchronisation()
+GameServer : {Number? mostCommonHash, Client[] outOfSyncClients} findOutOfSyncClients(Number turnNumber)
+GameServer : void handleWinner(Client client, CientSendWinnerMessage clientMsg)
+GameServer - Client
+GameServer - GameStartInfo
+GameServer - Intent
+
+
+interface MapWithMode
+MapWithMode : GameMapType map
+MapWithMode : GameMode mode
+
+class MapPlaylist
+MapPlaylist : MapWithMode[] MapsPlaylist
+MapPlaylist : Boolean DisableTeams
+MapPlaylist : GameConfig gameConfig()
+MapPlaylist : TeamCountConfig getTeamCount()
+MapPlaylist : MapWithMode getNextMap()
+MapPlaylist : Boolean shuffleMapsPlaylist()
+MapPlaylist : Boolean addNextMap(MapWithMode[] playlist, GameMapType[] nextEls, GameMode, mode)
+MapPlaylist - MapWithMode
+
+
+interface CosmeticResult
+CosmeticResult : String type
+CosmeticResult : PlayerCosmetics? cosmetics
+CosmeticResult : String reason
+
+interface PrivilegeChecker
+PrivilegeChecker : CosmeticResult isAllowed(String[] flares, PlayerCosmeticRefs refs)
+
+class PrivilegeCheckerImpl implements PrivilegeChecker
+PrivilegeCheckerImpl : Cosmetics cosmetics
+PrivilegeCheckerImpl : Uint8Array b64urlDecode(String base64)
+PrivilegeCheckerImpl : isPatternAllowed(String[] flares, String name, String? colorPaletteName)
+PrivilegeCheckerImpl : PlayerColor isColorAllowed(String[] flares, String color)
+PrivilegeCheckerImpl - CosmeticResult
+
+class FailOpenPrivilegeChecker implements PrivilegeChecker
+FailOpenPrivilegeChecker : isAllowed(String[] flares, PlayerCosmeticRefs refs)
+FailOpenPrivilegeChecker - CosmeticResult
+
+
+class PrivilegeRefresher
+PrivilegeRefresher : PrivilegeChecker? privilegeChecker
+PrivilegeRefresher : PrivilegeChecker failOpenPrivilegeChecker
+PrivilegeRefresher : Logger log
+PrivilegeRefresher : String endpoint
+PrivilegeRefresher : Number refreshInterval
+PrivilegeRefresher : void start()
+PrivilegeRefresher : PrivilegeChecker get()
+PrivilegeRefresher : Promise<void> loadPrivilegeChecker()
+PrivilegeRefresher - PrivilegeChecker
+PrivilegeRefresher - FailOpenPrivilegeChecker
+PrivilegeRefresher - PrivilegeCheckerImpl
+
+@enduml
